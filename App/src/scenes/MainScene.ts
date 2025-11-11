@@ -9,13 +9,15 @@ const HERO_SLASH_RANGE = 100;
 const HERO_MAX_HEALTH = 5;
 const WIN_SCORE = 30;
 
-type PhysicsSprite = Phaser.Physics.Arcade.Image;
+type PhysicsSprite = Phaser.Physics.Arcade.Image & {
+  body: Phaser.Physics.Arcade.Body;
+};
 
 export default class MainScene extends Phaser.Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private actionKey!: Phaser.Input.Keyboard.Key;
   private hero!: PhysicsSprite;
-  private demons!: Phaser.GameObjects.Group;
+  private demons!: Phaser.Physics.Arcade.Group;
   private lastSpawnTime = 0;
   private currentSpawnInterval = DEMON_SPAWN_INTERVAL;
 
@@ -59,11 +61,12 @@ export default class MainScene extends Phaser.Scene {
 
     this.hero = this.spawnHero(width * 0.2, height * 0.5);
 
-    this.demons = this.add.group();
+    this.demons = this.physics.add.group();
     this.physics.add.overlap(
       this.hero,
       this.demons,
-      this.handleHeroCollision,
+      (_hero, demon) =>
+        this.handleHeroCollision(demon as Phaser.GameObjects.GameObject),
       undefined,
       this
     );
@@ -159,11 +162,9 @@ export default class MainScene extends Phaser.Scene {
   }
 
   private spawnHero(x: number, y: number): PhysicsSprite {
-    const hero = this.physics.add
-      .image(x, y, 'heroSquare')
-      .setCircle(24)
-      .setImmovable(false);
-
+    const hero = this.physics.add.image(x, y, 'heroSquare') as PhysicsSprite;
+    hero.setCircle(24);
+    hero.setImmovable(false);
     hero.body.setCollideWorldBounds(true);
     hero.body.setDrag(320);
     return hero;
@@ -186,7 +187,8 @@ export default class MainScene extends Phaser.Scene {
       y = height + 40;
     }
 
-    const demon = this.physics.add.image(x, y, 'demonSquare').setCircle(22);
+    const demon = this.physics.add.image(x, y, 'demonSquare') as PhysicsSprite;
+    demon.setCircle(22);
 
     this.demons.add(demon);
 
@@ -198,11 +200,14 @@ export default class MainScene extends Phaser.Scene {
     demon.body.setVelocity(velocity.x, velocity.y);
   }
 
-  private handleHeroCollision(
-    hero: Phaser.GameObjects.GameObject,
-    demon: Phaser.GameObjects.GameObject
-  ): void {
-    if (!demon.active || this.isGameOver) {
+  private handleHeroCollision(demonObj: Phaser.GameObjects.GameObject): void {
+    if (this.isGameOver) {
+      return;
+    }
+
+    const demon = demonObj as PhysicsSprite;
+
+    if (!demon.active) {
       return;
     }
 
@@ -288,7 +293,8 @@ export default class MainScene extends Phaser.Scene {
     color: number,
     alpha = 1
   ): void {
-    const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+    const graphics = this.add.graphics();
+    graphics.setPosition(0, 0);
     graphics.fillStyle(color, alpha);
     graphics.fillRoundedRect(0, 0, width, height, 12);
     graphics.generateTexture(key, width, height);
