@@ -50,10 +50,19 @@ export default class MainScene extends Phaser.Scene {
       frameHeight: 253
     });
     
+    // Demon sprite sheet loading
+    // Multi-row sprite sheet with animations: Idle, Move, Attack, Damage, Death, Flames
+    // Each frame is approximately 16-24 pixels, we'll use 24x24 as default
+    // The sprite sheet has 18 rows total with different frame counts per row
+    this.load.spritesheet('demonSprite', '/assets/characters/demon.png', {
+      frameWidth: 24,
+      frameHeight: 24
+    });
+    
     // Add error handler to debug loading issues
     this.load.on('fileerror', (file: Phaser.Loader.File) => {
       console.error('❌ Failed to load file:', file.key, 'from:', file.url);
-      console.error('Make sure hero-idle.png exists in assets/characters/ folder');
+      console.error('Make sure the sprite sheet exists in assets/characters/ folder');
     });
     
     this.load.on('loaderror', (file: Phaser.Loader.File) => {
@@ -107,6 +116,135 @@ export default class MainScene extends Phaser.Scene {
       });
     }
 
+    // Create demon animations if sprite sheet is loaded
+    // Based on sprite sheet structure: Idle, Move, Attack, Damage, Death, Flames
+    // Each row has different frame counts, so we'll use frame indices
+    if (this.textures.exists('demonSprite')) {
+      console.log('✅ demonSprite sprite sheet loaded successfully!');
+      
+      // Calculate frames per row (assuming 24x24 frames)
+      const frameWidth = 24;
+      const frameHeight = 24;
+      const texture = this.textures.get('demonSprite');
+      const textureSource = texture.source[0];
+      const framesPerRow = Math.floor(textureSource.width / frameWidth);
+      
+      // Helper function to get frame indices for a specific row
+      // Phaser loads spritesheets row by row, so we calculate frame indices based on row
+      const getRowFrames = (rowIndex: number, frameCount: number) => {
+        const startFrame = rowIndex * framesPerRow;
+        return this.anims.generateFrameNumbers('demonSprite', { 
+          start: startFrame, 
+          end: startFrame + frameCount - 1 
+        });
+      };
+      
+      // Based on user-provided frame counts:
+      // Row 0: Idle right (7 frames)
+      // Row 1: Move right (8 frames)
+      // Row 2: Attack right (6 frames)
+      // Row 3: Damage right (4 frames)
+      // Row 4: Death right (6 frames)
+      // Row 5: Flames (7 frames)
+      // Row 6: Idle left (7 frames)
+      // Row 7: Move left (8 frames)
+      // Row 8: Attack left (6 frames)
+      // Row 9: Damage left (4 frames)
+      // Row 10: Death left (6 frames)
+      // Row 11: Flames (7 frames)
+      
+      // Idle animations (facing right)
+      this.anims.create({
+        key: 'demonIdleRight',
+        frames: getRowFrames(0, 7),
+        frameRate: 4,
+        repeat: -1
+      });
+      
+      // Move animations (facing right)
+      this.anims.create({
+        key: 'demonMoveRight',
+        frames: getRowFrames(1, 8),
+        frameRate: 10,
+        repeat: -1
+      });
+      
+      // Attack animations (facing right)
+      this.anims.create({
+        key: 'demonAttackRight',
+        frames: getRowFrames(2, 6),
+        frameRate: 12,
+        repeat: 0 // Play once
+      });
+      
+      // Damage animations (facing right)
+      this.anims.create({
+        key: 'demonDamageRight',
+        frames: getRowFrames(3, 4),
+        frameRate: 8,
+        repeat: 0
+      });
+      
+      // Death animations (facing right)
+      this.anims.create({
+        key: 'demonDeathRight',
+        frames: getRowFrames(4, 6),
+        frameRate: 6,
+        repeat: 0
+      });
+      
+      // Idle animations (facing left)
+      this.anims.create({
+        key: 'demonIdleLeft',
+        frames: getRowFrames(6, 7),
+        frameRate: 4,
+        repeat: -1
+      });
+      
+      // Move animations (facing left)
+      this.anims.create({
+        key: 'demonMoveLeft',
+        frames: getRowFrames(7, 8),
+        frameRate: 10,
+        repeat: -1
+      });
+      
+      // Attack animations (facing left)
+      this.anims.create({
+        key: 'demonAttackLeft',
+        frames: getRowFrames(8, 6),
+        frameRate: 12,
+        repeat: 0
+      });
+      
+      // Damage animations (facing left)
+      this.anims.create({
+        key: 'demonDamageLeft',
+        frames: getRowFrames(9, 4),
+        frameRate: 8,
+        repeat: 0
+      });
+      
+      // Death animations (facing left)
+      this.anims.create({
+        key: 'demonDeathLeft',
+        frames: getRowFrames(10, 6),
+        frameRate: 6,
+        repeat: 0
+      });
+      
+      // Flames animation (for projectiles)
+      this.anims.create({
+        key: 'demonFlames',
+        frames: getRowFrames(5, 7),
+        frameRate: 12,
+        repeat: -1
+      });
+    } else {
+      console.warn('⚠️ demonSprite sprite sheet not found. Using placeholder square.');
+      console.warn('Make sure demon.png is in assets/characters/ folder');
+    }
+
     this.hero = this.spawnHero(width * 0.2, height * 0.5);
 
     this.demons = this.physics.add.group();
@@ -152,6 +290,7 @@ export default class MainScene extends Phaser.Scene {
     }
 
     this.handleMovement();
+    this.updateDemonAnimations();
 
     if (Phaser.Input.Keyboard.JustDown(this.actionKey)) {
       this.performSlash();
@@ -161,6 +300,64 @@ export default class MainScene extends Phaser.Scene {
       this.spawnDemon();
       this.lastSpawnTime = time;
     }
+  }
+
+  private updateDemonAnimations(): void {
+    if (!this.textures.exists('demonSprite')) {
+      return;
+    }
+
+    const demons = this.demons.getChildren() as PhysicsSprite[];
+    demons.forEach((demon) => {
+      if (!demon.active || !(demon instanceof Phaser.GameObjects.Sprite)) {
+        return;
+      }
+
+      const velocity = demon.body.velocity;
+      const speed = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y);
+      const isMoving = speed > 10; // Threshold for movement
+      const facingRight = velocity.x >= 0;
+      
+      const demonData = demon as any;
+      const wasMoving = demonData.isMoving;
+      const wasFacingRight = demonData.facingRight;
+      
+      // Update direction if changed
+      if (facingRight !== wasFacingRight) {
+        demonData.facingRight = facingRight;
+      }
+      
+      // Update movement state if changed
+      if (isMoving !== wasMoving) {
+        demonData.isMoving = isMoving;
+      }
+      
+      // Only update animation if state changed or animation finished
+      const currentAnim = demon.anims.currentAnim;
+      const isAnimFinished = currentAnim && !demon.anims.isPlaying;
+      const shouldUpdate = 
+        (isMoving !== wasMoving) || 
+        (facingRight !== wasFacingRight) ||
+        (!currentAnim || isAnimFinished);
+      
+      if (shouldUpdate) {
+        if (isMoving) {
+          // Play move animation
+          if (facingRight && this.anims.exists('demonMoveRight')) {
+            demon.play('demonMoveRight');
+          } else if (!facingRight && this.anims.exists('demonMoveLeft')) {
+            demon.play('demonMoveLeft');
+          }
+        } else {
+          // Play idle animation
+          if (facingRight && this.anims.exists('demonIdleRight')) {
+            demon.play('demonIdleRight');
+          } else if (!facingRight && this.anims.exists('demonIdleLeft')) {
+            demon.play('demonIdleLeft');
+          }
+        }
+      }
+    });
   }
 
   private handleMovement(): void {
@@ -308,8 +505,25 @@ export default class MainScene extends Phaser.Scene {
       y = height + 40;
     }
 
-    const demon = this.physics.add.image(x, y, 'demonSquare') as PhysicsSprite;
-    demon.setCircle(22);
+    // Use sprite sheet if available, otherwise fall back to placeholder
+    let demon: PhysicsSprite;
+    if (this.textures.exists('demonSprite')) {
+      demon = this.physics.add.sprite(x, y, 'demonSprite') as PhysicsSprite;
+      // Start with idle animation facing right
+      if (this.anims.exists('demonIdleRight') && demon instanceof Phaser.GameObjects.Sprite) {
+        demon.play('demonIdleRight');
+      }
+      // Set collision size to match sprite (24x24)
+      demon.setSize(24, 24);
+      demon.setScale(44 / 24); // Scale to match original demon size (44x44)
+    } else {
+      demon = this.physics.add.image(x, y, 'demonSquare') as PhysicsSprite;
+      demon.setCircle(22);
+    }
+
+    // Store direction as a property on the demon
+    (demon as any).facingRight = true;
+    (demon as any).isMoving = false;
 
     this.demons.add(demon);
 
@@ -319,6 +533,20 @@ export default class MainScene extends Phaser.Scene {
       DEMON_SPEED
     );
     demon.body.setVelocity(velocity.x, velocity.y);
+    
+    // Update facing direction and animation based on velocity
+    if (this.textures.exists('demonSprite') && demon instanceof Phaser.GameObjects.Sprite) {
+      const facingRight = velocity.x >= 0;
+      (demon as any).facingRight = facingRight;
+      (demon as any).isMoving = true;
+      
+      // Play move animation in the correct direction
+      if (facingRight && this.anims.exists('demonMoveRight')) {
+        demon.play('demonMoveRight');
+      } else if (!facingRight && this.anims.exists('demonMoveLeft')) {
+        demon.play('demonMoveLeft');
+      }
+    }
   }
 
   private handleHeroCollision(demonObj: Phaser.GameObjects.GameObject): void {
@@ -348,7 +576,34 @@ export default class MainScene extends Phaser.Scene {
   }
 
   private onDemonDefeated(demon: PhysicsSprite): void {
-    demon.destroy();
+    // Play death animation if sprite sheet is loaded
+    if (this.textures.exists('demonSprite') && demon instanceof Phaser.GameObjects.Sprite) {
+      const demonData = demon as any;
+      const facingRight = demonData.facingRight !== false; // Default to right
+      
+      // Stop movement
+      demon.body.setVelocity(0, 0);
+      
+      // Play death animation
+      if (facingRight && this.anims.exists('demonDeathRight')) {
+        demon.play('demonDeathRight');
+        // Destroy after animation completes
+        demon.once('animationcomplete', () => {
+          demon.destroy();
+        });
+      } else if (!facingRight && this.anims.exists('demonDeathLeft')) {
+        demon.play('demonDeathLeft');
+        demon.once('animationcomplete', () => {
+          demon.destroy();
+        });
+      } else {
+        // Fallback: destroy immediately if animation doesn't exist
+        demon.destroy();
+      }
+    } else {
+      demon.destroy();
+    }
+    
     this.score += 1;
     this.scoreText.setText(`Score: ${this.score}`);
     this.playOptionalSound('demon-pop', { volume: 0.15 });
